@@ -36,7 +36,7 @@ configs = {"fs.azure.account.auth.type": "OAuth",
 
 dbutils.fs.mount(
   source = f"abfss://{storage_container_name}@{storage_account_name}.dfs.core.windows.net/",
-  mount_point = f"/mnt/{mount_name}}",
+  mount_point = f"/mnt/{mount_name}",
   extra_configs = configs)
 
 dbutils.fs.ls(mount_name)
