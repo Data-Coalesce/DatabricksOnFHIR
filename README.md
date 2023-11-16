@@ -1,6 +1,5 @@
 # DatabricksOnFHIR
-```
-mermaid
+```mermaid
 graph LR
 A[(Bronze Data)] -- Select Claims -->df[[Dataframe]] 
 subgraph "Notebook Step 1 (Python)"
