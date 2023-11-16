@@ -1,7 +1,15 @@
 # Databricks notebook source
 #variable declarations
 bronze_source_table="fhir.bronze_all_resource_types"
-silver_table="fhir.silver_claims"
+
+# COMMAND ----------
+
+# DBTITLE 1,Function for correcting schemas
+def getSchema(df,columnName):
+ value_nodes=df.select(col(columnName).alias('json')).rdd.map(lambda x: x.json)
+ value_nodes.collect();
+ value_schema=spark.read.json(value_nodes).schema
+ return value_schema
 
 # COMMAND ----------
 
@@ -45,22 +53,40 @@ df_patient=(
 
 # DBTITLE 1,Encounters
 from pyspark.sql.functions import col,split,struct
+from pyspark.sql.types import ArrayType,StructType,StructField,StringType
+
+# the type struct in the payload doesn't evolve correctly because of mixed schemas, so it gets stored as a string and we have to format it manually per resource type
+type_struct_fix=ArrayType(StructType([
+    StructField('coding', 
+                 ArrayType(StructType([
+                     StructField('code', StringType(), True), 
+                     StructField('display', StringType(), True), 
+                     StructField('system', StringType(), True)])
+                           , True)
+                 , True), 
+     StructField('text', StringType(),True)
+     ]),True)
+
 df_encounter=(
      spark.read.table(bronze_source_table)
     .filter("resource_type='Encounter'")
     .select("payload",
             "client",
-            col("payload.id").alias("encounter_id"),
+            col("payload.type").alias("encounter_type"),
+            col("payload.class").alias("encounter_class"),
+            col("payload.id").alias("encounter_id"),            
             col("payload.serviceProvider").alias("service_provider"),
             "payload.status",
             "payload.period"
-            )
+            )        
+    .withColumn("encounter_type",from_json(col("encounter_type"),type_struct_fix))
     .withColumn("patient_id",split(col("payload.subject.reference"),"/")[1])
     .withColumn("reason_codes",explode(col("payload.reasonCode.coding")))
+    .withColumn("participants",explode("payload.participant"))
     .drop("payload")
     .distinct()
 )
-#display(df_encounter)
+display(df_encounter)
 
 # COMMAND ----------
 
@@ -173,18 +199,44 @@ df_encounter
 .join(df_condition,encounterToConditionJoinKeys,"left")
 .select(
     df_encounter.patient_id,    
-    df_encounter.encounter_id,    
+    df_encounter.encounter_id,
+    df_encounter.encounter_class,
+    df_encounter.encounter_type,
+    df_encounter.status,
+    df_encounter.service_provider,
+    df_encounter.reason_codes,
+    df_encounter.participants,
+    df_encounter.period,
     df_procedure.procedure_struct,
     df_condition.condition_struct
     )
+.distinct()
 .groupBy(
     df_encounter.patient_id,
-    df_encounter.encounter_id)
+    df_encounter.encounter_id,
+    df_encounter.encounter_class,
+    df_encounter.encounter_type,
+    df_encounter.status,
+    df_encounter.service_provider,
+    df_encounter.reason_codes,
+    df_encounter.participants,
+    df_encounter.period)
 .agg(    
     collect_set("procedure_struct").alias("procedures"),
     collect_set("condition_struct").alias("conditions")
     )
- .withColumn("encounter_struct",struct(df_encounter.encounter_id,col("procedures"),col("conditions")))
+ .withColumn("encounter_struct",struct(      
+    df_encounter.encounter_id,
+    df_encounter.encounter_class,
+    df_encounter.encounter_type,
+    df_encounter.status,
+    df_encounter.service_provider,
+    df_encounter.reason_codes,
+    df_encounter.participants,
+    df_encounter.period,
+    col("procedures"),
+    col("conditions")
+     ))
 )
 #display(df_encounter_procedure)
 
@@ -199,7 +251,8 @@ df_allergy=(
             "client",            
             "payload.type",
             "payload.category",
-            "payload.criticality",      
+            "payload.criticality",  
+            col("payload.code.text").alias("description"),
             split(col("payload.patient.reference"),"/")[1].alias("patient_id"),            
             col("payload.id").alias("allergy_id"), 
             col("payload.recordedDate").alias("recorded_date")          
@@ -210,29 +263,30 @@ df_allergy=(
     .drop("payload")
     .distinct()
     .groupBy(
-        "client",
-        "allergy_id",        
+        "client",              
         "patient_id",
         "type",
         "category",
         "criticality",
+        "description",
         "recorded_date"
      )
     .agg(
+        collect_set(col("allergy_id")).alias("allergy_source_ids"), #allergies are very repetive with different ID's even though payload content is the same
         collect_set(col("verification_codes")).alias("verification_codes"),
         collect_set(col("clinical_status_codes")).alias("clinical_status_codes"),
         collect_set(col("allergy_codes")).alias("allergy_codes")
         )
-    
-     .withColumn("condition_struct",
-     struct(
-         col("allergy_id"),
+     .withColumn("allergy_struct",
+     struct(         
          col("type"),
          col("category"),
          col("criticality"),
+         col("description"),
          col("recorded_date"),
          col("verification_codes"),
-         col("clinical_status_codes")
+         col("clinical_status_codes"),
+         col("allergy_source_ids")
      ))
 )
 #display(df_allergy)
@@ -241,12 +295,13 @@ df_allergy=(
 
 # DBTITLE 1,Immunizations
 from pyspark.sql.functions import col,split,struct,explode
-df_vaccine=(
+df_immunization=(
      spark.read.table(bronze_source_table)
     .filter("resource_type='Immunization'")
     .select("payload",
             "client",
             "payload.status",
+             col("payload.occurrenceDateTime").alias("immunization_timestamp"),
              col("payload.id").alias("immunization_id"),
              split(col("payload.patient.reference"),"/")[1].alias("patient_id"),
              split(col("payload.encounter.reference"),"/")[1].alias("encounter_id")
@@ -257,16 +312,20 @@ df_vaccine=(
     .groupBy(
         "client",       
         "patient_id",     
-        "encounter_id",             
-        "immunization_id",
+        "encounter_id",                    
+        "immunization_timestamp",
         "status"
     )
-    .agg(collect_set("vaccine_codes").alias("vaccine_codes"))
+    .agg(
+        collect_set( "immunization_id").alias("immunization_source_ids"),
+        collect_set("vaccine_codes").alias("vaccine_codes")
+        )
       .withColumn("immunization_struct",
-     struct(
-         col("immunization_id"),
+     struct(         
+         col("immunization_timestamp"),
          col("vaccine_codes"),
-         col("status")
+         col("status"),
+         col("immunization_source_ids")
   
      ))
 )
@@ -283,25 +342,36 @@ df_patient_ids=(
     .withColumn("rollup_key",row_number().over(w)) #just need a basic row identifier so we can regroup after joining out the various source ids
     .withColumn("patient_id",explode("patient_source_ids"))
 )
-df_patient_enriched=(
+df_patient_joins=(
     df_patient_ids.join(
-        df_encounter_procedure,df_patient_ids.patient_id == df_encounter_procedure.patient_id,
+        df_encounter_procedure,
+        df_patient_ids.patient_id == df_encounter_procedure.patient_id,
         "left"
         )
+    .join(df_allergy,
+          df_patient_ids.patient_id == df_allergy.patient_id,
+          "left")
+    .join(df_immunization,
+        df_patient_ids.patient_id == df_immunization.patient_id,
+        "left")
     .select(
-        df_patient_ids,
-        df_encounter_procedure.encounter_struct
+        df_patient_ids.rollup_key,
+        df_encounter_procedure.encounter_struct,
+        df_allergy.allergy_struct,
+        df_immunization.immunization_struct
     )
+    .groupBy(df_patient_ids.rollup_key)
+    .agg(
+        collect_set("encounter_struct").alias("encounters"),
+        collect_set("allergy_struct").alias("allergies"),
+        collect_set("immunization_struct").alias("immunzations")
+    )   
+ )
+df_patient_enriched=(
+df_patient_ids.join(df_patient_joins,
+                    df_patient_ids.rollup_key==df_patient_joins.rollup_key
+                     ,"inner")
+                     .drop(df_patient_ids.rollup_key,df_patient_joins.rollup_key)
  )
 display(df_patient_enriched)
-#display(df_patient_encounter)
-# patientToEncounterJoinKeys=[    
-#          df_patient_ids.patient_id == df_encounter.patient_id      
-#  ]
-        
-#        ]
-# encounterToConditionJoinKeys=[
-# df_encounter.client==df_condition.client,
-# df_encounter.patient_id==df_condition.patient_id,
-# df_encounter.encounter_id==df_condition.encounter_id
-# ]
+

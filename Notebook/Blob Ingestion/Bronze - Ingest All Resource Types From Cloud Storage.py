@@ -83,8 +83,8 @@ spark.sql(f"""CREATE TABLE IF NOT EXISTS {bronze_table}
 
 # COMMAND ----------
 
-def valueSchema(df):
- value_nodes=df.select(col("value").alias('json')).rdd.map(lambda x: x.json)
+def valueSchema(df,colName):
+ value_nodes=df.select(col(colName).alias('json')).rdd.map(lambda x: x.json)
  value_nodes.collect();
  value_schema=spark.read.json(value_nodes).schema
  return value_schema
@@ -94,7 +94,7 @@ def valueSchema(df):
 from pyspark.sql.functions import from_json
 
 def upsertToDelta(microBatchOutputDF, batchId):
-  payload_schema=valueSchema(microBatchOutputDF);
+  payload_schema=valueSchema(microBatchOutputDF,"value");
   microBatchOutputDF=(
         microBatchOutputDF.select("value","client","source_file","processing_time",from_json("value",schema=payload_schema).alias("payload"))
        .withColumn("resource_type",col("payload.resourceType"))
