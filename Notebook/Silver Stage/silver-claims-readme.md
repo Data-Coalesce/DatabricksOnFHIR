@@ -1,5 +1,5 @@
 # Purpose
-Demonstrate associate level knowledge to pull Claims resource types from the Bronze FHIR data, cleanse it and transform it into more useful structure
+Demonstrate [Databricks](https://www.databricks.com) associate level data engineering knowledge to pull Claims resource types from the Bronze HL7 FHIR sameple data then cleanse it and transform it into more useful structure
 
 ```mermaid
 graph LR
