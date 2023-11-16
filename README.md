@@ -8,7 +8,7 @@ This repo was setup to apply knowledge learned from the Databricks Certification
  - Any clinical data display is sourced directly from the public sources disclosed below. To best our knowledge, the data is deidentified and/or synthesized for development and testing purposes.
 
 ## Purpose
-To continue developing my Databricks, Python, Spark and FHIR skills by working on a real world use case.  My mission is to create a Databricks only (except for cloud storage) solution for ingesting HL7 FHIR data and then applying a medallion architecture to it using notebooks, worksflows and NL. As I continue to learn more about Databricks, I hope to revise, improve and extend the code here.
+To continue developing my Databricks, Python, Spark and FHIR skills by working on a real world use case that is meaningful and has potential to help improve healthcare through data.  My mission is to create a Databricks only (except for cloud storage) solution for ingesting HL7 FHIR data and then applying a medallion architecture to it using notebooks, worksflows and NL. As I continue to learn more about Databricks, I hope to revise, improve and extend the code here.
 
 ### This flowchart isn't comprehensive, but it does present the general idea of the problems being solved and where I'm currently at
 ```mermaid
