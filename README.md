@@ -1,4 +1,5 @@
 # DatabricksOnFHIR
+```
 mermaid
 graph LR
 A[(Bronze Data)] -- Select Claims -->df[[Dataframe]] 
@@ -23,4 +24,4 @@ I --> agg
 end
 write[(Silver Data)]
 agg --> write
-
+```
