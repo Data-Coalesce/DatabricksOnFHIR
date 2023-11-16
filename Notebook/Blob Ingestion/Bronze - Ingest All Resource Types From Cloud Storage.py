@@ -20,6 +20,10 @@
 # MAGIC     - 2. Utilize micro-batching to apply custom function to each batch so that the text payload can be converted to a struct
 # MAGIC     - 3. Within the same micro-batch, implement incremental logic to update the bronze table with the new payload struct
 # MAGIC     - 4. Bronze table now has the original text payload, a struct payload, and some useful data from the payload to use for incremental upserts
+# MAGIC - 🤬 Some json nodes just don't deserialize into structs and are stored as strings instead
+# MAGIC   - 🙂 **Solution**
+# MAGIC     - 1. Let them save as strings so the files continue to load 
+# MAGIC     - 2. When working with different resource types, define the appropriate struct and then convert those columns manually using `from_json(col(),struct_definition)`
 # MAGIC
 # MAGIC **This image shows the cloud storage contents. My proof of concept container is named "poc-blob" and I have a subdirectory for ndjson files. Any subdirectory within ndjson simulates a different source for the data.**
 # MAGIC ![Cloud storage example](https://drive.google.com/uc?id=1yUpNgWe4ak2Btu6cYuRXUYMfjpZ-HdZT)
@@ -79,22 +83,27 @@ spark.sql(f"""CREATE TABLE IF NOT EXISTS {bronze_table}
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Function `valueSchema` accepts a dataframe from the microbatch and maps the "value" column (which should be StringType representation of valid json) to an RDD.  The RDD's are then collected and the schema 
+# MAGIC ℹFunction `valueSchema` accepts a dataframe from the microbatch and maps the "value" column (which should be StringType representation of valid json) to an RDD.  The RDD's are then collected and the schema 
 
 # COMMAND ----------
 
-def valueSchema(df):
- value_nodes=df.select(col("value").alias('json')).rdd.map(lambda x: x.json)
+def valueSchema(df,colName):
+ value_nodes=df.select(col(colName).alias('json')).rdd.map(lambda x: x.json)
  value_nodes.collect();
  value_schema=spark.read.json(value_nodes).schema
  return value_schema
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ℹ The next cell is the micro batch function that determines the payload schema and then merges the batch incrementally
+
+# COMMAND ----------
+
 from pyspark.sql.functions import from_json
 
 def upsertToDelta(microBatchOutputDF, batchId):
-  payload_schema=valueSchema(microBatchOutputDF);
+  payload_schema=valueSchema(microBatchOutputDF,"value");
   microBatchOutputDF=(
         microBatchOutputDF.select("value","client","source_file","processing_time",from_json("value",schema=payload_schema).alias("payload"))
        .withColumn("resource_type",col("payload.resourceType"))
@@ -115,6 +124,11 @@ def upsertToDelta(microBatchOutputDF, batchId):
             payload=s.payload
     WHEN NOT MATCHED THEN INSERT (client,payload_id,resource_type,source_file,processing_time,value,payload) VALUES(s.client,s.payload_id,s.resource_type,s.source_file,s.processing_time,s.value,s.payload)
   """)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ℹ The next cell is the structured streaming process that incrementally loads the files in the cloud storage container
 
 # COMMAND ----------
 
