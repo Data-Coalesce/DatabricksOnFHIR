@@ -7,6 +7,37 @@ This repo was setup to apply knowledge learned from the Databricks Certification
  - The code in here is not intended to be utilized in a production environment or any such purposes
  - Any clinical data display is sourced directly from the public sources disclosed below. To best our knowledge, the data is deidentified and/or synthesized for development and testing purposes.
 
+## Purpose
+To continue developing my Databricks, Python, Spark and FHIR skills by working on a real world use case.  My mission is to create a Databricks only (except for cloud storage) solution for ingesting HL7 FHIR data and then applying a medallion architecture to it using notebooks, worksflows and NL. As I continue to learn more about Databricks, I hope to revise, improve and extend the code here.
+
+### This flowchart isn't comprehensive, but it does present the general idea of the problems being solved and where I'm currently at
+```mermaid
+flowchart LR
+     subgraph fa:fa-fire HL7 FHIR Resource Types fa:fa-fire
+    A[fa:fa-fire HL7 FHIR] 
+    doca[/"fa:fa-medkit EOB"/] --> A
+    docb[/"fa:fa-medkit Claim"/] --> A
+    docc[/"fa:fa-medkit Patient"/] --> A
+    docd[/"fa:fa-medkit Encounter"/] --> A
+    doce[/"fa:fa-medkit Condition"/] --> A
+    docf[/"fa:fa-medkit Procedure"/] --> A
+    end
+    A -->|fa:fa-fire Bulk Data fa:fa-cloud-upload-alt| B
+    subgraph fa:fa-cloud Cloud Environment fa:fa-cloud
+    B[[fa:fa-boxes Cloud Storage]]
+    B --> |"Condition"| C(((Databricks)))
+    B --> |"Patient"| C
+    B --> |"Claim"| C
+    B --> |"EOB"| C
+    B --> |"Procedure"| C
+    B --> |"Encounter"| C
+    C -->|fa:fa-object-group Combined Structure fa:fa-object-group| D[(fa:fa-medal Bronze Data)]
+  end
+  net(["FHIR Compliant Api"])
+  A <-.-> net   
+  C <-.-> net  
+```
+
 ## Source Data
 [Smart Bulk Data Server](https://bulk-data.smarthealthit.org/)
 
@@ -23,3 +54,5 @@ This repo was setup to apply knowledge learned from the Databricks Certification
 [FontAwesome used in markdown](https://fontawesome.com/)
 
 [Flowcharts used in markdown](https://mermaid.js.org/)https://mermaid.js.org/)
+
+[Mermaid live editor](https://mermaid.live/)
