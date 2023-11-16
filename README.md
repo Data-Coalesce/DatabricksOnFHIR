@@ -1,6 +1,6 @@
 # DatabricksOnFHIR
 ## Introduction
-This repo was setup to apply knowledge learned from the Databricks Certification using real health care scenarios and synthetic data.  The code in this repository will be far from perfect, and should not be utilized in a production setting.  It's a "learning" for applied learning.  That said, I'd love contructive and professional feedback both from a Databricks engineering perspective as well as content (HL7 FHIR) utilization.
+This repo was setup to apply knowledge learned from the Databricks Certification using real health care scenarios and synthetic data available from multiple source (see "Source Data" section below).  The code in this repository will be far from perfect, and should not be utilized in a production setting.  It's a "learning" for applied learning.  That said, I'd love constructive and professional feedback both from a Databricks engineering perspective as well as content (HL7 FHIR) utilization.
 
 ## Source Data
 [Smart Bulk Data Server](https://bulk-data.smarthealthit.org/)
