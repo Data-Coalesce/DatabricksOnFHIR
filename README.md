@@ -17,3 +17,9 @@ This repo was setup to apply knowledge learned from the Databricks Certification
 [Epic Open API](https://fhir.epic.com/)
 
 [Smart On FHIR](https://smarthealthit.org/)
+
+## Other Awesome Resources Used Here
+
+[FontAwesome used in markdown](https://fontawesome.com/)
+
+[Flowcharts used in markdown](https://mermaid.js.org/)https://mermaid.js.org/)
