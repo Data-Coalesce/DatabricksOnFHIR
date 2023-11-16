@@ -48,7 +48,6 @@ df_patient=(
     )
 )
 
-
 # COMMAND ----------
 
 # DBTITLE 1,Encounters
@@ -86,7 +85,7 @@ df_encounter=(
     .drop("payload")
     .distinct()
 )
-display(df_encounter)
+#display(df_encounter)
 
 # COMMAND ----------
 
@@ -364,7 +363,7 @@ df_patient_joins=(
     .agg(
         collect_set("encounter_struct").alias("encounters"),
         collect_set("allergy_struct").alias("allergies"),
-        collect_set("immunization_struct").alias("immunzations")
+        collect_set("immunization_struct").alias("immunizations")
     )   
  )
 df_patient_enriched=(
@@ -373,5 +372,18 @@ df_patient_ids.join(df_patient_joins,
                      ,"inner")
                      .drop(df_patient_ids.rollup_key,df_patient_joins.rollup_key)
  )
-display(df_patient_enriched)
+
+# COMMAND ----------
+
+silver_table_fs="/user/hive/warehouse/fhir.db/silver/patient_enriched" #file system location for the table
+silver_table_name="fhir.patient_enriched"
+(
+    df_patient_enriched
+    .write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema","true")
+    .option("path",silver_table_fs)
+    .saveAsTable(silver_table_name)   
+)
 
