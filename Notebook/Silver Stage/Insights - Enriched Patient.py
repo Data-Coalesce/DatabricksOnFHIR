@@ -28,7 +28,7 @@ df_patient=(
 
 # COMMAND ----------
 
-# DBTITLE 1,Representation by Age, Gender and Marital Status
+# DBTITLE 1,Patient Counts Age, Gender and Marital Status
 from pyspark.sql.functions import months_between,current_date,col,lit,floor,count
 df_demo=(
 df_patient
