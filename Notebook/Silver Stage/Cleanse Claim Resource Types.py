@@ -27,31 +27,7 @@ silver_table="fhir.silver_claims"
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ##Step 1
-
-# COMMAND ----------
-
-@udf
-def getSchema(df,columnName):
- value_nodes=df.select(col(columnName).alias('json')).rdd.map(lambda x: x.json)
- value_nodes.collect();
- value_schema=spark.read.json(value_nodes).schema
- return value_schema
-
-# COMMAND ----------
-
-df=(
-     spark.read.table(bronze_source_table)
-    .filter("resource_type='Claim'")
-    .select("payload","payload.item")
-    .withColumn("item",explode(col("item")))
-)
-
-display(df)
-
-# COMMAND ----------
-
+# DBTITLE 1,Step 1
 from pyspark.sql.functions import explode,schema_of_json,lit,col,from_json,concat,collect_set,expr,size,array,struct,split
 from pyspark.sql.types import DoubleType,StructType,ArrayType,StructField,StringType
 
@@ -104,6 +80,7 @@ df=(
         "claim_line_amount",
         "claim_procedure.code",
         "claim_procedure.display",
+        "claim_line_encounter_id",
         concat("claim_procedure.system",lit("/"),
                "claim_procedure.code").alias("term")
         )
@@ -116,11 +93,7 @@ display(df)
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ##Step 2
-
-# COMMAND ----------
-
+# DBTITLE 1,Step 2
 from pyspark.sql.functions import array_sort,sum
 
 dfRollup=(
