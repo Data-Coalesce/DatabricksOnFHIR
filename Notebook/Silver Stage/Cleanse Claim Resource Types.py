@@ -96,7 +96,7 @@ display(df)
 # DBTITLE 1,Step 2
 from pyspark.sql.functions import array_sort,sum
 
-dfRollup=(
+df_rollup=(
     df.groupBy("payload_id",
                "patient_id",
                "claim_type",               
@@ -112,9 +112,9 @@ dfRollup=(
         array_sort(collect_set("claim_line")).alias("claim_lines")     
         )
  )
-display(dfRollup)
+display(df_rollup)
 (
-    dfRollup
+    df_rollup
     .write
     .mode("overwrite")
     .format("delta")

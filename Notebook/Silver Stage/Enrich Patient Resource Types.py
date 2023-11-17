@@ -19,32 +19,41 @@ from pyspark.sql.types import DoubleType
 df_patient=(
      spark.read.table(bronze_source_table)
     .filter("resource_type='Patient'")
-    .select("payload.id","payload.name","payload.gender","payload.birthDate","payload.maritalStatus","payload.telecom","payload.communication","payload.identifier","payload.extension")
+    .select("payload.id",
+            "payload.name",
+            "payload.gender",
+            col("payload.birthDate").alias("birth_date"),
+            "payload.maritalStatus",
+            "payload.telecom",
+            "payload.communication",
+            "payload.identifier",
+            "payload.extension")
     .distinct()
-    .withColumn("maritalStatus",col("maritalStatus")["coding"][0]["display"])
-    .withColumn("firstName",expr("filter(name, x -> x.use == 'official')")[0]["given"][0])
-    .withColumn("lastName",expr("filter(name, x -> x.use == 'official')")[0]["family"])
-    .withColumn("maidenName",expr("filter(name, x -> x.use == 'maiden')")[0]["family"])
+    .withColumn("marital_status",col("maritalStatus")["coding"][0]["display"])
+    .withColumn("first_name",expr("filter(name, x -> x.use == 'official')")[0]["given"][0])
+    .withColumn("last_name",expr("filter(name, x -> x.use == 'official')")[0]["family"])
+    .withColumn("maiden_name",expr("filter(name, x -> x.use == 'maiden')")[0]["family"])
     .withColumn("mrn",expr("filter(identifier, x -> x.type.coding[0].code == 'MR')")[0]["value"])
     .withColumn("mrn_source",expr("filter(identifier, x -> x.type.coding[0].code == 'MR')")[0]["system"])
     .withColumn("ssn",expr("filter(identifier, x -> x.type.coding[0].code == 'SS')")[0]["value"])   
-    .withColumn("driverLicense",expr("filter(identifier, x -> x.type.coding[0].code == 'DL')")[0]["value"])
-    .withColumn("passportNumber",expr("filter(identifier, x -> x.type.coding[0].code == 'PPN')")[0]["value"])    
-    .withColumn("motherMaidenName",expr("filter(extension, x -> x.url == 'http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName')")[0]["valueString"])
-    .withColumn("birthPlace",expr("filter(extension, x -> x.url == 'http://hl7.org/fhir/StructureDefinition/patient-birthPlace')")[0]["valueAddress"])
+    .withColumn("driver_license",expr("filter(identifier, x -> x.type.coding[0].code == 'DL')")[0]["value"])
+    .withColumn("passport_number",expr("filter(identifier, x -> x.type.coding[0].code == 'PPN')")[0]["value"])    
+    .withColumn("mother_maiden_name",expr("filter(extension, x -> x.url == 'http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName')")[0]["valueString"])
+    .withColumn("birth_place",expr("filter(extension, x -> x.url == 'http://hl7.org/fhir/StructureDefinition/patient-birthPlace')")[0]["valueAddress"])
     .withColumn("language",col("communication.language.coding.display")[0])
-    .withColumn("homePhoneNumber",expr("filter(telecom, x -> x.system == 'phone' and x.use='home')")["value"])
-    .withColumn("workPhoneNumber",expr("filter(telecom, x -> x.system == 'phone' and x.use='work')")["value"])
-    .withColumn("workEmail",expr("filter(telecom, x -> x.system == 'email' and x.use='work')")["value"])
-    .withColumn("medicalRecord",struct(col("mrn_source"),col("mrn")))
+    .withColumn("home_phone_number",expr("filter(telecom, x -> x.system == 'phone' and x.use='home')")["value"])
+    .withColumn("work_phone_number",expr("filter(telecom, x -> x.system == 'phone' and x.use='work')")["value"])
+    .withColumn("work_email",expr("filter(telecom, x -> x.system == 'email' and x.use='work')")["value"])
+    .withColumn("medical_record",struct(col("mrn_source"),col("mrn")))
     .drop("identifier","extension","communication","name","telecom")
     .distinct()
-    .groupBy("lastName","ssn","driverLicense","passportNumber","gender","birthDate","birthPlace")
+     #this group by is a best guess at identifying unique patients across sources. Obviously not a very robust MDM method but it works for this demonstation
+    .groupBy("last_name","ssn","driver_license","passport_number","gender","birth_date","birth_place")
     .agg(
         collect_set("id").alias("patient_source_ids"),
-        collect_set("medicalRecord").alias("medicalRecords"),
-        collect_set("firstName").alias("firstNames"),
-        collect_set("maritalStatus").alias("maritalStatus")
+        collect_set("medical_record").alias("medical_records"),
+        collect_set("first_name").alias("first_names"),
+        collect_set("marital_status").alias("marital_status")
     )
 )
 
@@ -86,6 +95,94 @@ df_encounter=(
     .distinct()
 )
 #display(df_encounter)
+
+# COMMAND ----------
+
+# DBTITLE 1,Claims
+from pyspark.sql.functions import explode,schema_of_json,lit,col,from_json,concat,collect_set,expr,size,array,struct,split,array_sort,sum
+from pyspark.sql.types import DoubleType,StructType,ArrayType,StructField,StringType
+
+# the type struct in the payload doesn't evolve correctly because of mixed schemas, so it gets stored as a string and we have to format it manually per resource type
+type_struct_fix=ArrayType(StructType([
+    StructField('coding', 
+                 ArrayType(StructType([
+                     StructField('code', StringType(), True), 
+                     StructField('display', StringType(), True), 
+                     StructField('system', StringType(), True)])
+                           , True)
+                 , True), 
+     StructField('text', StringType(),True)
+     ]),True)
+
+df_claim=(
+     spark.read.table(bronze_source_table)
+    .filter("resource_type='Claim'")
+    .select(
+        "payload",
+        "payload.payload_id",
+        "payload.type",
+        "payload.status",
+        "payload.patient",
+        "payload.billablePeriod",
+        "payload.created",
+        "payload.provider",
+        "payload.priority",
+        "payload.supportingInfo",
+        "payload.insurance",        
+        "payload.total"
+        )    
+     # explode out some detail so that we can roll them back up into a cleaner format    
+    .withColumn("claim_line",explode(col("payload.item"))) #break up the payload even more into the individual lines   
+    .withColumn("claim_procedure",explode("claim_line.productOrService.coding")) #break out the procedures or services
+    
+     # these columns are qualified with type/id - don't really need the qualifier as it doesn't align with the referenced data which has the Id only
+    .withColumn("patient_id",split(col("patient.reference"),"/")[1]) 
+    .withColumn("claim_line_encounter_id",split(col("claim_line.encounter.reference")[0],"/")[1])
+
+    # FHIR has these nested within arrays, but there should only be one value for any individual payload
+    .withColumn("claim_type", from_json(col("type"),type_struct_fix).alias("claim_type"))
+    .withColumn("priority",col("priority.coding.code")[0])   
+    .withColumn("claim_line_amount",col("claim_line.net.value").cast(DoubleType()))
+    # this produces a cleaner struct of the claim lines so they can be collected into a set in the next step
+    .withColumn("claim_line",struct(
+        "claim_line.sequence",
+        "claim_line_amount",
+        "claim_procedure.code",
+        "claim_procedure.display",
+        "claim_line_encounter_id",
+        concat("claim_procedure.system",lit("/"),
+               "claim_procedure.code").alias("term")
+        )
+    )   
+   .drop("payload","patient","type","claim_procedure","item")
+   .groupBy(
+        "payload_id",
+        "patient_id",
+        "claim_type",
+        "priority",
+        "status",
+        "created",
+         col("billablePeriod").alias("billable_period")
+     )
+     .agg(
+         sum(col("claim_line_amount")).alias("claim_total_amount"), # this is only being done here because sample data from SmartHealthIt has most claims total set to an arbitrary amount that is very repetitive.
+         collect_set("provider").alias("providers"),
+         collect_set("supportingInfo").alias("supporting_info"),
+         array_sort(collect_set("claim_line")).alias("claim_lines")     
+    )
+     .withColumn("claim_struct",struct(
+         col("claim_type"),
+         col("priority"),
+         col("status"),
+         col("created"),
+         col("billable_period"),
+         col("claim_total_amount"),
+         col("providers"),
+         col("supporting_info"),
+         col("claim_lines")
+     ))
+)
+display(df_claim)
 
 # COMMAND ----------
 
@@ -332,7 +429,7 @@ df_immunization=(
 
 # COMMAND ----------
 
-# DBTITLE 1,Enrich Patients with Encounters, Allergies, Immunization
+# DBTITLE 1,Enrich Patients with Encounters, Allergies, Immunization and Claims
 from pyspark.sql.functions import col,split,struct,count,sha2,concat,row_number
 from pyspark.sql.window import Window
 w = Window().orderBy(lit(0))
@@ -353,17 +450,23 @@ df_patient_joins=(
     .join(df_immunization,
         df_patient_ids.patient_id == df_immunization.patient_id,
         "left")
+    .join(df_claim,
+          df_patient_ids.patient_id == df_claim.patient_id,
+          "left"
+    )
     .select(
         df_patient_ids.rollup_key,
         df_encounter_procedure.encounter_struct,
         df_allergy.allergy_struct,
-        df_immunization.immunization_struct
+        df_immunization.immunization_struct,
+        df_claim.claim_struct
     )
     .groupBy(df_patient_ids.rollup_key)
     .agg(
         collect_set("encounter_struct").alias("encounters"),
         collect_set("allergy_struct").alias("allergies"),
-        collect_set("immunization_struct").alias("immunizations")
+        collect_set("immunization_struct").alias("immunizations"),
+        collect_set("claim_struct").alias("claims")
     )   
  )
 df_patient_enriched=(
@@ -372,6 +475,7 @@ df_patient_ids.join(df_patient_joins,
                      ,"inner")
                      .drop(df_patient_ids.rollup_key,df_patient_joins.rollup_key)
  )
+ 
 
 # COMMAND ----------
 
