@@ -1,6 +1,8 @@
 # Databricks notebook source
 #variable declarations
 bronze_source_table="fhir.bronze_all_resource_types"
+silver_table_fs="/user/hive/warehouse/fhir.db/silver/patient_enriched" #file system location for the table
+silver_table_name="fhir.patient_enriched"
 
 # COMMAND ----------
 
@@ -19,7 +21,9 @@ from pyspark.sql.types import DoubleType
 df_patient=(
      spark.read.table(bronze_source_table)
     .filter("resource_type='Patient'")
-    .select("payload.id",
+    .select("source",
+            "payload_id",
+            col("payload.id").alias("source_id"),
             "payload.name",
             "payload.gender",
             col("payload.birthDate").alias("birth_date"),
@@ -27,8 +31,10 @@ df_patient=(
             "payload.telecom",
             "payload.communication",
             "payload.identifier",
-            "payload.extension")
+            "payload.extension"
+            )
     .distinct()
+    .withColum("source_id_key_pair",struct(col("source"),col("source_id")))
     .withColumn("marital_status",col("maritalStatus")["coding"][0]["display"])
     .withColumn("first_name",expr("filter(name, x -> x.use == 'official')")[0]["given"][0])
     .withColumn("last_name",expr("filter(name, x -> x.use == 'official')")[0]["family"])
@@ -50,7 +56,7 @@ df_patient=(
      #this group by is a best guess at identifying unique patients across sources. Obviously not a very robust MDM method but it works for this demonstation
     .groupBy("last_name","ssn","driver_license","passport_number","gender","birth_date","birth_place")
     .agg(
-        collect_set("id").alias("patient_source_ids"),
+        collect_set("source_id_key_pair").alias("source_id_key_pairs"),
         collect_set("medical_record").alias("medical_records"),
         collect_set("first_name").alias("first_names"),
         collect_set("marital_status").alias("marital_status")
@@ -182,7 +188,7 @@ df_claim=(
          col("claim_lines")
      ))
 )
-display(df_claim)
+#display(df_claim)
 
 # COMMAND ----------
 
@@ -479,8 +485,6 @@ df_patient_ids.join(df_patient_joins,
 
 # COMMAND ----------
 
-silver_table_fs="/user/hive/warehouse/fhir.db/silver/patient_enriched" #file system location for the table
-silver_table_name="fhir.patient_enriched"
 (
     df_patient_enriched
     .write

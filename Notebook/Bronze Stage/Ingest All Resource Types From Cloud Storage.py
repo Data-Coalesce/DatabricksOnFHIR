@@ -41,7 +41,7 @@
 
 spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled","true") # This is absolutely critical for this process to work as intended.  Otherwise the Merge in the micro batches can't evolve the schema in the payload struct column
 # variable declarations
-source_path="/mnt/fhir/ndjson/"
+source_path="/mnt/fhir/ndjson/Source1/"
 bronze_table="fhir.bronze_all_resource_types" #fully qualified table name
 bronze_table_fs="/user/hive/warehouse/fhir.db/bronze_all_resource_types" #file system location for the table
 
@@ -68,13 +68,13 @@ spark.sql(f"DROP TABLE IF EXISTS {bronze_table}")
 dbutils.fs.rm(bronze_table_fs,True) #make sure the file system is clean
 spark.sql(f"""CREATE TABLE IF NOT EXISTS {bronze_table}
           (          
-              client string,
+              source string,
               payload_id string,
               resource_type string,
               processing_time timestamp NOT NULL,
               value string NOT NULL,
               source_file string NOT NULL,
-              payload struct<client_id string,payload_id string,resource_type string>         
+              payload struct<source_id string, payload_id string, resource_type string>         
           )          
           USING DELTA
           LOCATION "{bronze_table_fs}"
@@ -105,7 +105,12 @@ from pyspark.sql.functions import from_json
 def upsertToDelta(microBatchOutputDF, batchId):
   payload_schema=valueSchema(microBatchOutputDF,"value");
   microBatchOutputDF=(
-        microBatchOutputDF.select("value","client","source_file","processing_time",from_json("value",schema=payload_schema).alias("payload"))
+        microBatchOutputDF.select(
+          "value",
+          "source",
+          "source_file",
+          "processing_time",
+          from_json("value",schema=payload_schema).alias("payload"))
        .withColumn("resource_type",col("payload.resourceType"))
        .withColumn("payload_id",col("payload.id"))
   )
@@ -114,7 +119,7 @@ def upsertToDelta(microBatchOutputDF, batchId):
   microBatchOutputDF.sparkSession.sql(f"""
     MERGE INTO {bronze_table} AS t
     USING payloads AS s
-    ON s.client = t.client
+    ON s.source = t.source
         AND s.payload_id=t.payload_id
         AND s.resource_type=t.resource_type
     WHEN MATCHED THEN 
@@ -122,7 +127,24 @@ def upsertToDelta(microBatchOutputDF, batchId):
             processing_time=s.processing_time,
             source_file=s.source_file,
             payload=s.payload
-    WHEN NOT MATCHED THEN INSERT (client,payload_id,resource_type,source_file,processing_time,value,payload) VALUES(s.client,s.payload_id,s.resource_type,s.source_file,s.processing_time,s.value,s.payload)
+    WHEN NOT MATCHED THEN INSERT (
+      source,
+      payload_id,
+      resource_type,
+      source_file,
+      processing_time,
+      value,
+      payload
+      ) 
+      VALUES(
+        s.source,
+        s.payload_id,
+        s.resource_type,
+        s.source_file,
+        s.processing_time,
+        s.value,
+        s.payload
+        )
   """)
 
 # COMMAND ----------
@@ -152,7 +174,7 @@ stream_df=(spark.readStream
   .option("inferSchema","false")
   .load(source_path)
   .select("*"
-          ,regexp_replace(regexp_replace("_metadata.file_path",source_path,""),concat(lit("/"),col("_metadata.file_name")),"").alias("client")          
+          ,regexp_replace(regexp_replace("_metadata.file_path",source_path,""),concat(lit("/"),col("_metadata.file_name")),"").alias("source")          
           ,col("_metadata.file_path").alias("source_file")
           ,current_timestamp().alias("processing_time")          
           )  

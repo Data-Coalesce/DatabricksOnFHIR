@@ -21,9 +21,9 @@ df_patient=(
     )
 df_patient=(
     df_patient
-    .withColumn("age",floor(months_between(current_date(),col("birthDate"))/lit(12)))
+    .withColumn("age",floor(months_between(current_date(),col("birth_date"))/lit(12)))
     .withColumn("age_group",age_bucket(col("age")))
-    .withColumn("marital_status",col("maritalStatus")[0])
+    .withColumn("marital_status",col("marital_status")[0])
 )
 
 # COMMAND ----------
@@ -54,7 +54,7 @@ df_patient
 .withColumn("vaccination_date",date_format(col("immunization.immunization_timestamp"),"yyyy-MM-dd"))
 .withColumn("vaccination_YYYYMM",date_format( col("vaccination_date"),"yyyy-MM"))
 .drop("immunizations","immunization")
- .groupBy("gender",
+.groupBy("gender",
           "age",
           "age_group",
           "marital_status",
