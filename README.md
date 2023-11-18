@@ -1,6 +1,6 @@
 # Databricks On FHIR
 ## Introduction
-This repo was setup to apply knowledge learned from the Databricks Certification using real health care scenarios and synthetic data available from multiple source (see "Source Data" section below).  The code in this repository will be far from perfect, and should not be utilized in a production setting.  It's a "learning" for applied learning.  That said, I'd love constructive and professional feedback both from a Databricks engineering perspective as well as content (HL7 FHIR) utilization.
+This repo was setup to apply knowledge learned from the Databricks Certification using real health care scenarios and synthetic data available from multiple source (see "Source Data" section below).  The code in this repository will be far from perfect, and should not be utilized in a production setting.  It's a "learning" for applied learning.  That said, I'd love constructive and professional feedback both from a Databricks engineering perspective as well as content (FHIR) utilization.
 
 ## Disclaimers and Disclosuers
  - This repo is not assoicated or affiliated with Databricks or any FHIR organization
@@ -8,13 +8,13 @@ This repo was setup to apply knowledge learned from the Databricks Certification
  - Any clinical data display is sourced directly from the public sources disclosed below. To best our knowledge, the data is deidentified and/or synthesized for development and testing purposes.
 
 ## Purpose
-To continue developing my Databricks, Python, Spark and FHIR skills by working on a real world use case that is meaningful and has potential to help improve healthcare through data.  My mission is to create a Databricks only (except for cloud storage) solution for ingesting HL7 FHIR data and then applying a medallion architecture to it using notebooks, worksflows and NL. As I continue to learn more about Databricks, I hope to revise, improve and extend the code here.
+To continue developing my Databricks, Python, Spark and FHIR skills by working on a real world use case that is meaningful and has potential to help improve healthcare through data.  My mission is to create a Databricks only (except for cloud storage) solution for ingesting FHIR data and then applying a medallion architecture to it using notebooks, worksflows and NL. As I continue to learn more about Databricks, I hope to revise, improve and extend the code here.
 
 ### This flowchart isn't comprehensive, but it does present the general idea of the problems being solved and where I'm currently at
 ```mermaid
 flowchart LR
-     subgraph fa:fa-fire HL7 FHIR Resource Types fa:fa-fire
-    A[fa:fa-fire HL7 FHIR] 
+     subgraph fa:fa-fire FHIR Resource Types fa:fa-fire
+    A[fa:fa-fire FHIR] 
     doca[/"fa:fa-medkit EOB"/] --> A
     docb[/"fa:fa-medkit Claim"/] --> A
     docc[/"fa:fa-medkit Patient"/] --> A
