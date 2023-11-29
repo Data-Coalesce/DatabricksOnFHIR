@@ -53,6 +53,6 @@ flowchart LR
 
 [FontAwesome used in markdown](https://fontawesome.com/)
 
-[Flowcharts used in markdown](https://mermaid.js.org/)https://mermaid.js.org/)
+[Flowcharts used in markdown](https://mermaid.js.org/)
 
 [Mermaid live editor](https://mermaid.live/)
